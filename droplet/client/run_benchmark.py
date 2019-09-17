@@ -24,6 +24,7 @@ from droplet.server.benchmarks import (
     dist_avg,
     locality,
     predserving,
+    retwis_benchmark,
     scaling,
     summa,
     utils
@@ -61,6 +62,9 @@ elif bname == 'pred_serving':
 elif bname == 'avg':
     total, scheduler, kvs, retries = dist_avg.run(droplet_client, num_requests,
                                                   None)
+elif bname == 'retwis':
+    total, scheduler, kvs, retries = retwis_benchmark.run(
+        droplet_client, num_requests, None)
 elif bname == 'summa':
     total, scheduler, kvs, retries = summa.run(droplet_client, num_requests,
                                                None)
