@@ -84,7 +84,7 @@ class DropletConnection():
 
         self.response_sock = self.context.socket(zmq.PULL)
         response_port = 9000 + tid
-        self.response_sock.setsockopt(zmq.RCVTIMEO, 1000)
+        self.response_sock.setsockopt(zmq.RCVTIMEO, 10000)
         self.response_sock.bind('tcp://*:' + str(response_port))
 
         self.response_address = 'tcp://' + ip + ':' + str(response_port)
@@ -275,6 +275,10 @@ class DropletConnection():
 
         r = GenericResponse()
         r.ParseFromString(self.func_call_sock.recv())
+
+        if r.response_id == "":
+            print(r)
+            raise ValueError('No response ID sent by the scheduler.')
 
         self.rid += 1
         return r.response_id
