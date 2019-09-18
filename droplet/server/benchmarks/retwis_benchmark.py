@@ -51,14 +51,15 @@ def run(droplet_client, num_requests, sckt):
             if value is None: return None
             value = pickle.loads(value)
             return value
-        # def get_with_vc(self, key):
-        #     if self.exists(key):
-        #         vc, values = self._droplet.get(key)
-        #         value = values[0]
-        #         value = pickle.loads(value)
-        #         return vc, value
-        #     else:
-        #         return None, None
+        def causal_get(self, key):
+            res = self._droplet.causal_get(key)
+            if res is not None:
+                vc, values = res
+                value = values[0]
+                value = pickle.loads(value)
+                return vc, value
+            else:
+                return None, None
         # Storing arbitary values that can be retrieved by get().
         def set(self, key, value):
             value = pickle.dumps(value)
@@ -67,10 +68,7 @@ def run(droplet_client, num_requests, sckt):
         # Dependencies is {'key': <vc>}
         def causal_set(self, key, value, dependencies):
             value = pickle.dumps(value)
-
-            client_id = str(int(uuid.uuid4()))
-            vector_clock = {client_id: 1}
-            self._droplet.causal_put(key, vector_clock, dependencies, value, client_id)
+            self._droplet.causal_put(key, key, value, dependencies)
 
         ## Counter storage.
         # incr in Redis is used for two things:
@@ -339,7 +337,7 @@ def run(droplet_client, num_requests, sckt):
                 # Convert the parent post id to its post content id.
                 parent_content_key = '%s:id:%s:%s' % (klass, parent_post_id, 'content')
                 # Get the parent tweet content's VC; we need it to express a dependency on it.
-                vc, _ = r.get_with_vc(parent_content_key)
+                vc, _ = r.causal_get(parent_content_key)
                 # Post our tweet, with the causal dependency.
                 r.causal_set('%s:id:%s:%s' % (klass,post.id,'content'), content, {parent_content_key: vc})
 
@@ -420,6 +418,10 @@ def run(droplet_client, num_requests, sckt):
         redis = DropletRedisShim(droplet)
         Post.create(redis, user, post)
         return 'success'
+    def ccc_post_create_causal(droplet, user, post):
+        redis = DropletRedisShim(droplet)
+        Post.create_causal(redis, user, post)
+        return 'success'
     def ccc_reply_create(droplet, user, post, parent_cid):
         redis = DropletRedisShim(droplet)
         Post.create(redis, user, post, parent_cid)
@@ -447,6 +449,7 @@ def run(droplet_client, num_requests, sckt):
         'ccc_user_profile': ccc_user_profile,
         'ccc_user_follow': ccc_user_follow,
         'ccc_post_create': ccc_post_create,
+        'ccc_post_create_causal': ccc_post_create_causal,
         'ccc_reply_create': ccc_reply_create,
         'ccc_reply_create_causal': ccc_reply_create_causal,
         # 'ccc_test_empty': ccc_test_empty,
@@ -500,24 +503,22 @@ def run(droplet_client, num_requests, sckt):
 
     # Experiment parameters.
     # ######################
+    count_anomalies = True
+    logging_rate = 1
+    reply_frac = 0.2
+    causal_mode = True
     if num_requests < 1000:
         num_users = 100
         max_degree = 10
         num_pretweets = 100
         num_ops = num_requests  # 80% reads, 20% writes
         usernames = [str(i + 1) for i in range(num_users)]
-        reply_frac = 0.2
-        count_anomalies = False
-        logging_rate = 1
     else:
         num_users = 1000
-        max_degree = 30
+        max_degree = 50
         num_pretweets = 5000
         num_ops = num_requests  # 80% reads, 20% writes
         usernames = [str(i + 1) for i in range(num_users)]
-        reply_frac = 0.2
-        count_anomalies = False
-        logging_rate = 1
 
     # for user in usernames:
     # callfn('ccc_user_timeline', '1', 1)
@@ -546,10 +547,12 @@ def run(droplet_client, num_requests, sckt):
         # logging.info(parent_tweet_cid)
         # logging.info(username)
         # logging.info("{} says: @{}, agreed!".format(username, parent_tweet_cid))
-        res = cfns['ccc_reply_create'](
-            username, "{} says: @{}, agreed!".format(username, parent_tweet_cid), parent_tweet_cid).get()
-        # res = cfns['ccc_reply_create'](
-        #     username, "{} says: @{}, agreed!".format(username, parent_tweet_cid), parent_tweet_cid).get()
+        if causal_mode:
+            cfns['ccc_reply_create_causal'](username,
+                "{} says: @{}, agreed!".format(username, parent_tweet_cid), parent_tweet_cid).get()
+        else:
+            cfns['ccc_reply_create'](username,
+                "{} says: @{}, agreed!".format(username, parent_tweet_cid), parent_tweet_cid).get()
         return True
 
 
@@ -595,20 +598,13 @@ def run(droplet_client, num_requests, sckt):
             if t < reply_frac: # Reply attempt factor.
                 tweeted = post_random_reply(username)
             if not tweeted:
-                cfns['ccc_post_create'](username, post).get()
+                if causal_mode:
+                    cfns['ccc_post_create_causal'](username, post).get()
+                else:
+                    cfns['ccc_post_create'](username, post).get()
             if time.time() - log_start > logging_rate:
                 logging.info("%s tweets populated." % i)
                 log_start = time.time()
-            # cfns['ccc_post_create'](username, post).get()
-            # elapsed = time.time() - start
-            # wtimes.append(elapsed)
-            # epoch_wtimes.append(elapsed)
-            # if time.time() - log_start > 5:
-            #     logging.info("%s tweets populated." % i)
-            #     # if sckt:
-            #     #     sckt.send(cp.dumps(epoch_wtimes))
-            #     epoch_wtimes.clear()
-
 
 
     # Execute workload.
@@ -646,7 +642,10 @@ def run(droplet_client, num_requests, sckt):
                 tweeted = post_random_reply(username)
             if not tweeted:
                 post = "{} says: I LOVE droplet!".format(username)
-                res = cfns['ccc_post_create'](username, post).get()
+                if causal_mode:
+                    res = cfns['ccc_post_create_causal'](username, post).get()
+                else:
+                    res = cfns['ccc_post_create'](username, post).get()
             wtimes.append(time.time() - w_start)
 
     end = time.time()

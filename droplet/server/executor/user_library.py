@@ -12,7 +12,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+import uuid
 import zmq
+
+from anna.lattices import (
+    MapLattice,
+    MultiKeyCausalLattice,
+    SetLattice,
+    VectorClock,
+)
 
 import droplet.server.utils as sutils
 from droplet.shared.serializer import Serializer
@@ -56,12 +64,24 @@ class DropletUserLibrary(AbstractDropletUserLibrary):
         self.address = sutils.BIND_ADDR_TEMPLATE % (sutils.RECV_INBOX_PORT +
                                                     self.executor_tid)
 
+        self.client_id = str(int(uuid.uuid4()))
+
         # Socket on which inbound messages, if any, will be received.
         self.recv_inbox_socket = context.socket(zmq.PULL)
         self.recv_inbox_socket.bind(self.address)
 
     def put(self, ref, value):
         return self.anna_client.put(ref, serializer.dump_lattice(value))
+
+    def causal_put(self, ref, value, deps):
+        data = SetLattice({self.dump(value)})
+        mkc_value = MultiKeyCausalLattice(
+            VectorClock({self.client_id: MaxIntLattice(1)}),
+            MapLattice(deps),
+            data,
+        )
+        return self.anna_client.causal_put(
+            ref, mkc_value, client_id)
 
     def get(self, ref):
         if type(ref) != list:
@@ -85,6 +105,12 @@ class DropletUserLibrary(AbstractDropletUserLibrary):
             return result
         else:
             return result[ref]
+
+    def casual_get(self, ref):
+        versions, results = self.anna_client.causal_get(
+            ref, client_id=self.client_id)
+        return results[ref]  # (vc, value) or None
+
 
     def getid(self):
         return (self.executor_ip, self.executor_tid)
