@@ -511,7 +511,7 @@ def run(droplet_client, num_requests, sckt):
         logging_rate = 1
     else:
         num_users = 1000
-        max_degree = 30
+        max_degree = 50
         num_pretweets = 5000
         num_ops = num_requests  # 80% reads, 20% writes
         usernames = [str(i + 1) for i in range(num_users)]
