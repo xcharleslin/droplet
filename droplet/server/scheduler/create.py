@@ -17,8 +17,10 @@ import random
 
 from anna.lattices import (
     LWWPairLattice,
+    MapLattice,
+    MultiKeyCausalLattice,
     SetLattice,
-    SingleKeyCausalLattice
+    SingleKeyCausalLattice,
 )
 
 from droplet.shared.proto.droplet_pb2 import (
@@ -40,13 +42,8 @@ def create_function(func_create_socket, kvs, consistency=NORMAL):
     name = sutils.get_func_kvs_name(func.name)
     logging.info('Creating function %s.' % (name))
 
-    if consistency == NORMAL:
-        body = LWWPairLattice(sutils.generate_timestamp(0), func.body)
-        kvs.put(name, body)
-    else:
-        skcl = SingleKeyCausalLattice(sutils.DEFAULT_VC,
-                                      SetLattice({func.body}))
-        kvs.put(name, skcl)
+    skcl = MultiKeyCausalLattice(sutils.DEFAULT_VC, MapLattice(dict()), SetLattice({func.body}))
+    kvs.put(name, skcl)
 
     funcs = utils.get_func_list(kvs, '', fullname=True)
     funcs.append(name)

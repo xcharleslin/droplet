@@ -71,7 +71,8 @@ class DropletUserLibrary(AbstractDropletUserLibrary):
         self.recv_inbox_socket.bind(self.address)
 
     def put(self, ref, value):
-        return self.anna_client.put(ref, serializer.dump_lattice(value))
+        # return self.anna_client.put(ref, serializer.dump_lattice(value))
+        return self.causal_put(ref, value)
 
     def causal_put(self, ref, value, deps):
         data = SetLattice({self.dump(value)})
@@ -84,27 +85,30 @@ class DropletUserLibrary(AbstractDropletUserLibrary):
             ref, mkc_value, client_id)
 
     def get(self, ref):
-        if type(ref) != list:
-            refs = [ref]
-        else:
-            refs = ref
+        res = self.causal_get(ref)
+        if res is None: return None
+        return res[1]
+        # if type(ref) != list:
+        #     refs = [ref]
+        # else:
+        #     refs = ref
 
-        kv_pairs = self.anna_client.get(refs)
-        result = {}
+        # kv_pairs = self.anna_client.get(refs)
+        # result = {}
 
-        # Deserialize each of the lattice objects and return them to the
-        # client.
-        for key in kv_pairs:
-            # If the key is not in the kvs, we can just return None.
-            if kv_pairs[key] is None:
-                result[key] = None
-            else:
-                result[key] = serializer.load_lattice(kv_pairs[key])
+        # # Deserialize each of the lattice objects and return them to the
+        # # client.
+        # for key in kv_pairs:
+        #     # If the key is not in the kvs, we can just return None.
+        #     if kv_pairs[key] is None:
+        #         result[key] = None
+        #     else:
+        #         result[key] = serializer.load_lattice(kv_pairs[key])
 
-        if type(ref) == list:
-            return result
-        else:
-            return result[ref]
+        # if type(ref) == list:
+        #     return result
+        # else:
+        #     return result[ref]
 
     def casual_get(self, ref):
         versions, results = self.anna_client.causal_get(

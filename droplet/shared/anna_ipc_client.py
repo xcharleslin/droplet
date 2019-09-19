@@ -73,6 +73,7 @@ class AnnaIpcClient(BaseAnnaClient):
 
         request, _ = self._prepare_data_request(keys)
         request.response_address = self.get_response_address
+        logging.info("get sending")
         self.get_request_socket.send(request.SerializeToString())
 
         kv_pairs = {}
@@ -113,6 +114,7 @@ class AnnaIpcClient(BaseAnnaClient):
         request.response_address = self.get_response_address
         request.future_read_set.extend(future_read_set)
 
+        logging.info("causal get sending")
         self.get_request_socket.send(request.SerializeToString())
 
         # Initialize all responses to None, and only change them if we have a
@@ -159,6 +161,7 @@ class AnnaIpcClient(BaseAnnaClient):
         tup.payload, tup.lattice_type = self._serialize(value)
 
         request.response_address = self.put_response_address
+        logging.info("put sending")
         self.put_request_socket.send(request.SerializeToString())
 
         try:
@@ -177,7 +180,7 @@ class AnnaIpcClient(BaseAnnaClient):
             return resp.tuples[0].error == NO_ERROR
 
     def causal_put(self, key, mk_causal_value, client_id):
-        request, tuples = self._prepare_causal_data_request(client_id, key,
+        request, tuples = self._prepare_causal_data_request(client_id, {key},
                                                             MULTI)
 
         # We can assume this is tuples[0] because we only support one put
@@ -185,6 +188,7 @@ class AnnaIpcClient(BaseAnnaClient):
         tuples[0].payload, _ = self._serialize(mk_causal_value)
 
         request.response_address = self.put_response_address
+        logging.info("causal put sending")
         self.put_request_socket.send(request.SerializeToString())
 
         # If we get a response from the causal cache in this case, it is
@@ -205,13 +209,11 @@ class AnnaIpcClient(BaseAnnaClient):
     def _prepare_causal_data_request(self, client_id, keys, consistency):
         request = CausalRequest()
         request.consistency = consistency
-        request.client_id = str(client_id)
-
+        request.id = str(client_id)
         tuples = []
         for key in keys:
-            ct = request.add_tuples()
-            ct.key = key
-            tuples.append(ct)
+            tp = request.tuples.add()
+            tp.key = key
 
         return request, tuples
 

@@ -75,7 +75,6 @@ def run_bench(bname, num_requests, droplet, kvs, sckt, create=False):
                                                              num_requests,
                                                              sckt)
     elif bname == 'retwis':
-        logging.info("Calling retwis_benchmark.run().")
         total, scheduler, kvs, retries = retwis_benchmark.run(droplet, num_requests,
                                                          sckt)
     elif bname == 'predserving':

@@ -26,24 +26,16 @@ CACHE_VERISON_GC_PORT = 7200
 def retrieve_function(name, kvs, consistency=NORMAL):
     kvs_name = sutils.get_func_kvs_name(name)
 
-    if consistency == NORMAL:
-        # This means that the function is stored in an LWWPairLattice.
-        lattice = kvs.get(kvs_name)[kvs_name]
-        if lattice:
-            result = serializer.load_lattice(lattice)
-        else:
-            return None
-    else:
-        # This means that the function is stored in an SingleKeyCausalLattice.
-        _, result = kvs.causal_get([kvs_name])
-        lattice = result[kvs_name]
+    # This means that the function is stored in an SingleKeyCausalLattice.
+    _, result = kvs.causal_get([kvs_name])
+    lattice = result[kvs_name]
 
-        if lattice:
-            # If there are multiple concurrent values, we arbitrarily pick the
-            # first one listed.
-            result = serializer.load_lattice(lattice)[0]
-        else:
-            return None
+    if lattice:
+        # If there are multiple concurrent values, we arbitrarily pick the
+        # first one listed.
+        result = serializer.load_lattice(lattice)[0]
+    else:
+        return None
 
     # Check to see if the result is a tuple. This means that the first object
     # in the tuple is a class that we can initialize, and the second value is a
